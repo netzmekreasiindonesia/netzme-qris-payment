@@ -448,11 +448,7 @@ class WC_Gateway_netzmeqr extends WC_Payment_Gateway
 
 		$request = new WP_Http;
 		$result = $request->request( $api_url , array( 'method' => 'POST', 'body' => $body, 'headers' => $headers ) );
-
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				$this->add_debug_log("create qris transaction request " . (array) $result);
-			}
-
+		
 		if (is_wp_error($result)) {
 			$cart_page_url = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : $woocommerce->cart->get_cart_url();
 			include_once("error.php");
@@ -638,7 +634,7 @@ class WC_Gateway_netzmeqr extends WC_Payment_Gateway
 				"payment_time" => "$nzpayment_time"
 		);
 		echo wp_json_encode($named_array);
-		return;
+		die();
 	}
 	
 	/**

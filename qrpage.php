@@ -4,12 +4,13 @@ function CheckStatus(e)
 	e.preventDefault();
 	jQuery.ajax({
 	  type:"get",
-	  url:"<?php echo esc_url(get_site_url()); ?>?wc-api=netzmeqr_gateway&action=checkstatus&key=<?php echo urlencode($this->encrypt($order_id)); ?>",
+	  url:"<?php echo esc_url_raw(get_site_url()); ?>?wc-api=netzmeqr_gateway&action=checkstatus&key=<?php echo urlencode($this->encrypt($order_id)); ?>",
 	  success:function(data)
 	  {
+	  		console.log(data);
 		  if (data == '1') {
 			<?php
-			echo "t1 = window.setTimeout(function(){ window.location = '".esc_url($order->get_checkout_order_received_url())."'; },3);";            
+			echo "t1 = window.setTimeout(function(){ window.location = '".esc_url_raw($order->get_checkout_order_received_url())."'; },3);";            
 			?>
 		  } else {
 			window.location.href=window.location.href;
@@ -121,12 +122,12 @@ setInterval(function()
 {
 	jQuery.ajax({
 	  type:"get",
-	  url:"<?php echo esc_url(get_site_url()); ?>?wc-api=netzmeqr_gateway&action=checkstatus&key=<?php echo urlencode($this->encrypt($order_id)); ?>",
+	  url:"<?php echo esc_url_raw(get_site_url()); ?>?wc-api=netzmeqr_gateway&action=checkstatus&key=<?php echo urlencode($this->encrypt($order_id)); ?>",
 	  success:function(data)
 	  {
 		  if( data == '1'){
 			<?php
-			echo "t1 = window.setTimeout(function(){ window.location = '".esc_url($order->get_checkout_order_received_url())."'; },3);";
+			echo "t1 = window.setTimeout(function(){ window.location = '".esc_url_raw($order->get_checkout_order_received_url())."'; },3);";
 			?>
 		  }
 	  }
