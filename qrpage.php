@@ -1,3 +1,6 @@
+<?php
+defined( 'ABSPATH' ) or exit;
+?>
 <script type="text/javascript">
 function CheckStatus(e)
 {

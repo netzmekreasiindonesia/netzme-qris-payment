@@ -1,11 +1,12 @@
 <?php
+defined( 'ABSPATH' ) or exit;
 
 use Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType;
 
 final class Netzme_Qr_Gateway_Blocks extends AbstractPaymentMethodType {
 
     private $gateway;
-    protected $name = 'netzmeqr_gateway';// your payment gateway name
+    protected $name = 'netzmeqr_gateway';
 
     public function initialize() {
         $this->settings = get_option( 'netzmeqr_gateway', []);
