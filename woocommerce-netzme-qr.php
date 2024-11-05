@@ -360,7 +360,7 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 			$order = new WC_Order( $order_id );
 			if ( $order->get_status() == 'processing' || $order->get_status() == 'completed') {
 				wp_redirect( $order->get_checkout_order_received_url() );
-				return;
+				exit();
 			}
 		   //check if order alrea
 			if ($order->get_transaction_id()) {
