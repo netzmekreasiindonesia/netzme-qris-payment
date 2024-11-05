@@ -432,7 +432,7 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 			$clientSecret = $this->clientSecret;
 			$privateKey = $this->privateKey;
 
-			$sign = $this->generateServiceSignature($clientSecret, 'POST', $uri, $ts->accessToken, $named_array, $now);
+			$sign = $this->generateServiceSignature($clientSecret, 'POST', $uri, $ts->accessToken, $invoice_array, $now);
 			$randNumber = $this->generate_rand_order();
 			$headers = [
 				'Content-Type' => 'application/json',
