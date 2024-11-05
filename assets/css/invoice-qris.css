@@ -502,3 +502,8 @@ body {
     height: 56px;
     border-radius: 56px;
     object-fit: cover; }
+.image-container {
+  display: flex;
+  justify-content: center;
+}
+

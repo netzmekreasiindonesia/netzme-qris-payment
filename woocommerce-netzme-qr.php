@@ -1,35 +1,24 @@
 <?php
 /**
- * Plugin Name: Payment netzmeqr Gateway
- * Plugin URI: https://www.om4g.us/
- * Description: netzmeqr
- * Author: om4g.us
- * Author URI: https://om4g.us/
- * Version: 1.0.5
- * Text Domain: wc-netzmeqr
- * Domain Path: /i18n/languages/
- *
- *
- * License: GNU General Public License v3.0
- * License URI: http://www.gnu.org/licenses/gpl-3.0.html
- *
- * @package   WC-Gateway-netzmeqr
- * @author    om4g.us
- * @category  Admin
- * @copyright Copyright (c) 2015-2016, om4g.us, Inc. and WooCommerce
- * @license   http://www.gnu.org/licenses/gpl-3.0.html GNU General Public License v3.0
- *
- * netzmeqr
- */
-
+ * Plugin Name: QRIS Invoice Netzme
+ * Plugin URI: https://www.netzme.id
+ * Description: Accept QRIS payments in Indonesia with Netzme. Seamlessly integrated into WooCommerce.
+ * Author: Netzme
+ * Author URI: https://www.netzme.id
+ * Version: 1.0.6
+ * License: GPLv2 or later
+ * License URI: http://www.gnu.org/licenses/gpl-2.0.html
+*/
 defined( 'ABSPATH' ) or exit;
 
 
 // Make sure WooCommerce is active
 if ( ! in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', get_option( 'active_plugins' ) ) ) ) {
-    return;
+	return;
 }
 
+define('NETZME_APP_KEY', 'netzme_key');
+define('NETZME_APP_VERSION', '1.0.6');
 
 /**
  * Add the gateway to WC Available Gateways
@@ -38,11 +27,65 @@ if ( ! in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins',
  * @param array $gateways all available WC gateways
  * @return array $gateways all WC gateways
  */
-function wc_netzmeqr_add_to_gateways( $gateways ) {
-    $gateways[] = 'WC_Gateway_netzmeqr';
-    return $gateways;
+function netzmeqr_add_to_gateways( $gateways ) {
+	$gateways[] = 'WC_Gateway_netzmeqr';
+	return $gateways;
 }
-add_filter( 'woocommerce_payment_gateways', 'wc_netzmeqr_add_to_gateways' );
+add_filter( 'woocommerce_payment_gateways', 'netzmeqr_add_to_gateways' );
+
+/**
+ * function to declare compatibility with cart_checkout_blocks feature 
+*/
+function declare_cart_checkout_blocks_compatibility() {
+    if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('cart_checkout_blocks', __FILE__, true);
+    }
+}
+add_action('before_woocommerce_init', 'declare_cart_checkout_blocks_compatibility');
+
+add_action( 'woocommerce_blocks_loaded', 'netzme_qr_register_payment_method_type' );
+
+/**
+ * function to register a payment method type
+ */
+function netzme_qr_register_payment_method_type() {
+    // Check if the required class exists
+    if ( ! class_exists( 'Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
+        return;
+    }
+
+    require_once plugin_dir_path(__FILE__) . 'includes/class-wc-netzme-qr-block.php';
+
+    add_action(
+        'woocommerce_blocks_payment_method_type_registration',
+        function( Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry $payment_method_registry ) {
+            $payment_method_registry->register( new Netzme_Qr_Gateway_Blocks );
+        }
+    );
+}
+
+/**
+ * function to register a styles css
+ */
+add_action('init', 'register_netzme_styles');
+function register_netzme_styles() {
+	wp_register_style( 'qris-css', plugin_dir_url( __FILE__ ).'assets/css/css.css', array(), NETZME_APP_VERSION );
+	wp_enqueue_style( 'qris-css' );
+
+	wp_register_style( 'invoice-qris-css', plugin_dir_url( __FILE__ ).'assets/css/invoice-qris.css', array(), NETZME_APP_VERSION );
+	wp_enqueue_style( 'invoice-qris-css' );
+}
+
+
+/**
+ * function to register a scripts
+ */
+add_action('init', 'register_netzme_scripts');
+function register_netzme_scripts() {
+	wp_register_script( 'qris-js', plugin_dir_url( __FILE__ ).'assets/js/invoice-qris.js', [], NETZME_APP_VERSION, true );
+	wp_enqueue_script( 'qris-js' );
+}
+
 
 
 /**
@@ -52,16 +95,15 @@ add_filter( 'woocommerce_payment_gateways', 'wc_netzmeqr_add_to_gateways' );
  * @param array $links all plugin links
  * @return array $links all plugin links + our custom links (i.e., "Settings")
  */
-function wc_netzmeqr_gateway_plugin_links( $links ) {
+function netzmeqr_gateway_plugin_links( $links ) {
 
-    $plugin_links = array(
-        '<a href="' . admin_url( 'admin.php?page=wc-settings&tab=checkout&section=netzmeqr_gateway' ) . '">' . __( 'Configure', 'wc-gateway-netzmeqr' ) . '</a>'
-    );
+	$plugin_links = array(
+		'<a href="' . admin_url( 'admin.php?page=wc-settings&tab=checkout&section=netzmeqr_gateway' ) . '">' . __( 'Configure', 'wp-invoice-toko-netzme' ) . '</a>'
+	);
 
-    return array_merge( $plugin_links, $links );
+	return array_merge( $plugin_links, $links );
 }
-add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'wc_netzmeqr_gateway_plugin_links' );
-
+add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'netzmeqr_gateway_plugin_links' );
 
 /**
  * netzmeqr Payment Gateway
@@ -73,633 +115,571 @@ add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'wc_netzmeqr_g
  * @extends     WC_Payment_Gateway
  * @version     1.0.5
  * @package     WooCommerce/Classes/Payment
- * @author      om4g.us
+ * @author      Netzme
  */
-add_action( 'plugins_loaded', 'wc_netzmeqr_gateway_init', 11 );
-
-function wc_netzmeqr_gateway_init() {
-
-    class WC_Gateway_netzmeqr extends WC_Payment_Gateway {
-
-        /**
-         * Constructor for the gateway.
-         */
-        public function __construct() {
-            $this->id                 = 'netzmeqr_gateway';
-            $this->icon               = apply_filters('woocommerce_netzmeqr_icon', '');
-            $this->has_fields         = false;
-            $this->method_title       = __( 'netzmeqr', 'wc-gateway-netzmeqr' );
-            $this->method_description = __( 'Allows netzmeqr.', 'wc-gateway-netzmeqr' );
-
-            // Load the settings.
-            $this->init_form_fields();
-            $this->init_settings();
-
-            // Define user set variables
-            $this->title        = $this->get_option( 'title' );
-            $this->description  = $this->get_option( 'description' );
-            $this->BaseUrl  = $this->get_option( 'BaseUrl' );
-            $this->PayBaseUrl  = $this->get_option( 'PayBaseUrl' );
-            $this->ClientID  = $this->get_option( 'ClientID' );
-            $this->ClientSecret  = $this->get_option( 'ClientSecret' );
-            $this->MerchantID  = $this->get_option( 'MerchantID' );
-            $this->PayClientID  = $this->get_option( 'PayClientID' );
-            $this->PayToken  = $this->get_option( 'PayToken' );
-            $this->AccessToken  = $this->get_option( 'AccessToken' );
-            $this->ExpiredTime  = $this->get_option( 'ExpiredTime' );
-            $this->FeeType  = $this->get_option( 'FeeType' );
-            $this->CommissionPercentage  = $this->get_option( 'CommissionPercentage' );
-            $this->PrivateKey = $this->get_option('PrivateKey');
-            $this->ChannelID = $this->get_option('ChannelID');
-            $this->TokoNetzmeBaseUrl = $this->get_option('TokoNetzmeBaseUrl');
-
-            // Actions
-            add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
-            add_action('woocommerce_receipt_' . $this->id, array($this, 'receipt_page'));
-            add_action( 'woocommerce_thankyou_' . $this->id, array( $this, 'thankyou_page' ) );
-            //add_action('woocommerce_api_' . $this->id . '_gateway', array($this, 'ipn_response'));
-            add_action( 'woocommerce_api_netzmeqr_gateway', array( $this, 'ipn_response'));
-            //https://om4g.us/wp/wc-api/netzmeqr_gateway/
-        }
-
-        public function getSnapToken() {
-            $api_url = $this->BaseUrl . '/api/v1/access-token/b2b';
-            $rawBody = [
-                'grantType' => 'client_credentials',
-                'additionalInfo' => []
-            ];
-            $body = json_encode($rawBody);
-
-            $clientId = $this->ClientID;
-            $clientSecret = $this->ClientSecret;
-            $privateKey = $this->PrivateKey;
-
-            $now = date(DATE_ATOM);
-            $sign = $this->generateAuthSig($clientId, $clientSecret, $privateKey, $now);
-
-            $headers = array(
-                'Content-Type' => 'application/json', 
-                'X-TIMESTAMP' => $now, 
-                'X-CLIENT-KEY' => $clientId, 
-                'X-SIGNATURE' => $sign
-            );
-
-            $request = new WP_Http;
-            $result = $request->request( $api_url , array( 'method' => 'POST', 'body' => $body, 'headers' => $headers ) );
-
-            $resp = json_decode($result['body']);
-            return $resp;
-        }
-
-        private function generateAuthSig($clientId, $clientSecret, $privateKey, $now) {
-            $privateKey = <<<EOD
-            -----BEGIN RSA PRIVATE KEY-----
-            $privateKey
-            -----END RSA PRIVATE KEY-----
-            EOD;
-            $hash = $clientId . '|' . $now;
-            $signature = '';
-
-            // Sign the data with the private key using SHA256
-            if (openssl_sign($hash, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
-                return base64_encode($signature);
-            } else {
-                throw new Exception('Unable to sign data.');
-            }
-        }
-
-        /**
-         * Initialize Gateway Settings Form Fields
-         */
-        public function init_form_fields() {
-
-            $this->form_fields = apply_filters( 'wc_netzmeqr_form_fields', array(
-
-                'enabled' => array(
-                    'title'   => __( 'Enable/Disable', 'wc-gateway-netzmeqr' ),
-                    'type'    => 'checkbox',
-                    'label'   => __( 'Enable netzmeqr Payment', 'wc-gateway-netzmeqr' ),
-                    'default' => 'yes'
-                ),
-                'title' => array(
-                    'title'       => __( 'Title', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'This controls the title for the payment method the customer sees during checkout.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( 'QRIS Payment', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'BaseUrl' => array(
-                    'title'       => __( 'BaseUrl', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'BaseUrl.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( 'https://tokoapi-stg.netzme.com', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'PayBaseUrl' => array(
-                    'title'       => __( 'PayBaseUrl', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'PayBaseUrl.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( 'https://pay-stg.netzme.com', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'TokoNetzmeBaseUrl' => array(
-                    'title'       => __( 'TokoNetzmeBaseUrl', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'TokoNetzmeBaseUrl.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( 'https://api-toko-netzme-stg.netzme.com', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'ClientID' => array(
-                    'title'       => __( 'ClientID', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'ClientID.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( '', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'ClientSecret' => array(
-                    'title'       => __( 'ClientSecret', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'ClientSecret.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( '', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'PrivateKey' => array(
-                    'title'       => __( 'PrivateKey', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'textarea',
-                    'description' => __( 'PrivateKey.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( '', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'ChannelID' => array(
-                    'title'       => __( 'ChannelID', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'ChannelID.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( '', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'MerchantID' => array(
-                    'title'       => __( 'MerchantID', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'MerchantID.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( '', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'PayClientID' => array(
-                    'title'       => __( 'PayClientID', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'PayClientID.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( '', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'PayToken' => array(
-                    'title'       => __( 'PayToken', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'PayToken.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( '', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'AccessToken' => array(
-                    'title'       => __( 'AccessToken', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'AccessToken.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( '', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-                'ExpiredTime' => array(
-                    'title'       => __( 'QR Expired Time (Minutes)', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'QR Expired Time (Minutes).', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( '60', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),              
-                'FeeType' => array(
-                    'title'       => __( 'Fee Type', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'select',
-                    'description' => __( 'Fee Type.', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( 'on_buyer', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                    'options' => array(
-                        'on_buyer' => 'on_buyer',
-                        'on_seller' => 'on_seller'
-                   )
-                ),              
-                'CommissionPercentage' => array(
-                    'title'       => __( 'Commission Percentage', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'Commission Percentage. Example: 0.7', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( '0.0', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                ),
-
-                'PaymentMethode' => array(
-                    'title'       => __( 'Payment Methode', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'multiselect',
-                    'description' => __( 'Payment Methode', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( 'qris', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                    'options' => array(
-                        'BANK_TRANSFER' => 'QRIS',
-                        'qris' => 'Bank Transfer'
-                   )
-                ),
-
-                'PaymentReminderInMinutes' => array(
-                    'title'       => __( 'Reminder Payment In Minutes', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'text',
-                    'description' => __( 'Reminder payment pending After', 'wc-gateway-netzmeqr' ),
-                    'default'     => __( '720', 'wc-gateway-netzmeqr' ),
-                    'desc_tip'    => true,
-                 ),
-
-                /*
-                'instructions' => array(
-                    'title'       => __( 'Instructions', 'wc-gateway-netzmeqr' ),
-                    'type'        => 'textarea',
-                    'description' => __( 'Instructions that will be added to the thank you page and emails.', 'wc-gateway-netzmeqr' ),
-                    'default'     => '',
-                    'desc_tip'    => true,
-                ),
-                */
-            ) );
-        }
-
-
-        /**
-         * Output for the order received page.
-         */
-        public function thankyou_page() {
-            // if ( $this->instructions ) {
-            //  echo wpautop( wptexturize( $this->instructions ) );
-            // }
-            echo "Thank you";
-        }
-
-        
-
-        function receipt_page($order_id)
-        {
-            $order = new WC_Order( $order_id );
-            if ( $order->get_status() == 'processing' || $order->get_status() == 'completed') {
-                echo "t1 = window.setTimeout(function(){ window.location = '".$order->get_checkout_order_received_url()."'; },3);";
-                die();
-            }
-           //check if order alrea
-            if ($order->get_transaction_id()) {
-                $qrImage = $order->get_meta('qr_image');
-                $nzterminalId = $order->get_meta('terminal_id');
-                $datenzexpiredTs = date_parse($order->get_meta('expired_ts'));
-                include_once("qrpage.php");
-                return;
-            }
-
-            $desc = '';
-            if ( 0 < sizeof( $order->get_items() ) )
-            {
-                foreach ( $order->get_items() as $item )
-                {
-                    if ( $item['qty'] )
-                    {
-                        $item_name = htmlspecialchars($item['name']);
-                        $desc .= $item['qty'] .' x '. $item_name . ', ';
-                    }
-                }
-                $desc = substr($desc, 0, -2 );
-            }
-
-            $refNo  = date_format($order->get_date_created(), "Ymd") . "-" . $order_id;
-            $ExpiredTime = intval($this->ExpiredTime)*60;
-
-            $named_array = [
-                "custIdMerchant" => $this->MerchantID,
-                "partnerReferenceNo" => $refNo,
-                "amount" => [
-                    "value" => $order->get_total(),
-                    "currency" => "IDR"
-                ],
-                "amountDetail" => [
-                    "basicAmount" => [
-                        "value" => $order->get_total(),
-                        "currency" => "IDR"
-                    ],
-                    "shippingAmount" => [
-                        "value" => "0",
-                        "currency" => "IDR"
-                    ]
-                ],
-                "payMethod" => "QRIS",
-                "commissionPercentage" => $this->CommissionPercentage,
-                "expireInSecond" => "$ExpiredTime", 
-                "feeType" => $this->FeeType,
-                "additionalInfo" => [
-                    "email" => $order->get_billing_email(),
-                    "notes" => $desc,
-                    "description" => $desc,
-                    "phoneNumber" => $this->normalizePhoneNumber($order->get_billing_phone()),
-                    "imageUrl" => "",
-                    "fullname" => $order->get_billing_first_name().' '.$order->get_billing_last_name()
-                ]
-            ];
-
-            //$this->add_debug_log("receipt_page $order_id request " . print_r($named_array, true));
-            // Now, the HTTP request:
-            $uri = '/api/v1.0/invoice/create-transaction';
-            $api_url = $this->BaseUrl . $uri;
-            $body = json_encode($named_array);
-            $now = date(DATE_ATOM);
-            $ts = $this->getSnapToken();
-            $clientId = $this->ClientID;
-            $clientSecret = $this->ClientSecret;
-            $privateKey = $this->PrivateKey;
-
-            $sign = $this->generateServiceSignature($clientSecret, 'POST', $uri, $ts->accessToken, $named_array, $now);
-           
-            $headers = array(
-                'Content-Type' => 'application/json',
-                'CHANNEL-ID' => $this->ChannelID,
-                'X-EXTERNAL-ID' => $order_id,
-                'X-PARTNER-ID' => $this->ClientID,
-                'X-TIMESTAMP' => $now, 
-                'Authorization' => $ts->tokenType .' ' . $ts->accessToken,
-                'X-SIGNATURE' => $sign
-            );
-
-            $request = new WP_Http;
-            $result = $request->request( $api_url , array( 'method' => 'POST', 'body' => $body, 'headers' => $headers ) );
-
-            $resp = json_decode($result['body']);
-            //$this->add_debug_log("receipt_page $order_id response " . print_r($resp, true));
-            $nzstatus = $resp->additionalInfo->status;
-
-            $nzmessage      = $resp->responseMessage;
-            $nzexpiredTs    = $resp->additionalInfo->expiredTs;
-            //[expiredTs] => 2022-06-19T22:29:57.279+07:00
-            $datenzexpiredTs = date_parse($nzexpiredTs);
-            $nzterminalId   = $resp->additionalInfo->terminalId;
-            $qrImage        = $resp->additionalInfo->qrImage;
-            if(!$nzstatus){
-                global $woocommerce;
-                $cart_page_url = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : $woocommerce->cart->get_cart_url();
-                echo "<br/>QR Generation Failed<br/>";
-                echo "<br/><a href='$cart_page_url'>Kembali</a><br/>";
-            }else{
-
-                
-                $order->set_transaction_id($resp->partnerReferenceNo);
-                $order->update_meta_data('qr_image', $qrImage);
-                $order->update_meta_data('terminal_id', $nzterminalId);
-                $order->update_meta_data('expired_ts', $resp->additionalInfo->expiredTs);
-
-                //additional info
-                $order->update_meta_data('shipping_provider', '-');
-                $order->update_meta_data('awb_number', '-');
-                $order->update_meta_data('tracking_url', '-');
-                $order->update_meta_data('remainder_email_sent', '0');
-
-                $order->save();
-
-                WC()->mailer()->customer_invoice($order);
-                WC()->cart->empty_cart();
-                wc_reduce_stock_levels($order_id);
-                include_once("qrpage.php");
-
-                //$order->update_status( 'on-hold', __( 'Awaiting netzmeqr payment', 'wc-gateway-netzmeqr' ) );
-                // Reduce stock levels
-                //$order->reduce_order_stock();
-               
-				// Remove cart
-               
-				// Get the WC_Email_New_Order object
-				//$email_new_order = WC()->mailer()->get_emails()['WC_Email_New_Order'];
-				// Sending the new Order email notification for an $order_id (order ID)
-				//$email_new_order->trigger( $order_id );
-            }
-        }
-
-        function generateServiceSignature($clientSecret, $method, $uri, $token, $body, $now) {
-            $data = json_encode($body);
-            $signature = '';
-            $data = "{$method}:{$uri}:{$token}:". hash('sha256', $data) .":{$now}";
-
-            $signature = hash_hmac('sha512', $data, $clientSecret);
-
-            return $signature;
-        }
-
-        function normalizePhoneNumber($phoneNumber) {
-            if (isset($phoneNumber) && is_string($phoneNumber)) {
-                return preg_replace(['/\s|-|\.|_|=|[aA-zZ]/', '/^0/', '/^[1-9]/'], ['', '+62', '+$0'], $phoneNumber);
-            }
-            return $phoneNumber;
-        }
-
-
-        /**
-         * Add content to the WC emails.
-         *
-         * @access public
-         * @param WC_Order $order
-         * @param bool $sent_to_admin
-         * @param bool $plain_text
-         */
-        public function email_instructions( $order, $sent_to_admin, $plain_text = false ) {
-
-            if ( $this->instructions && ! $sent_to_admin && $this->id === $order->payment_method && $order->has_status( 'on-hold' ) ) {
-                echo wpautop( wptexturize( $this->instructions ) ) . PHP_EOL;
-            }
-        }
-
-        /**
-         * Process the payment and return the result
-         *
-         * @param int $order_id
-         * @return array
-         */
-        public function process_payment( $order_id ) {
-
-            $order = wc_get_order( $order_id );
-
-            // Mark as on-hold (we're awaiting the payment)
-            //$order->update_status( 'on-hold', __( 'Awaiting netzmeqr payment', 'wc-gateway-netzmeqr' ) );
-
-            // Reduce stock levels
-            //$order->reduce_order_stock();
-            // Remove cart
-            //WC()->cart->empty_cart();
-
-            $orderkey = !method_exists($order, 'get_order_key') ? $order->order_key : $order->get_order_key();
-            $orderid = !method_exists($order, 'get_id') ? $order->id : $order->get_id();
-
-            return array(   'result'    => 'success',
-            'redirect'  => add_query_arg('key', $orderkey, add_query_arg(array(
-            'order-pay' => $orderid),
-            $order->get_checkout_payment_url(true))));
-
-            // Return thankyou redirect
-            //return array(
-            //  'result'    => 'success',
-            //  'redirect'  => $this->get_return_url( $order )
-            //);
-        }
-
-        function checkstatus(){
-            $order_id = $this->decrypt($_GET['key']);
-            $order = new WC_Order( $order_id );
-            if ( $order->get_status() == 'processing' || $order->get_status() == 'completed' ) {
-                echo "1";
-                die();
-            }
-            echo "0";
-        }
-
-        private function checkAuth()
-        {
-          $AUTH_USER = CALBACK_INVOUCE_USERNAME;
-          $AUTH_PASS = CALBACK_INVOUCE_PASSWORD;
-
-          header('Cache-Control: no-cache, must-revalidate, max-age=0');
-          $has_supplied_credentials = !(empty($_SERVER['PHP_AUTH_USER']) && empty($_SERVER['PHP_AUTH_PW']));
-          $is_not_authenticated = (
-              !$has_supplied_credentials ||
-              $_SERVER['PHP_AUTH_USER'] != $AUTH_USER ||
-              $_SERVER['PHP_AUTH_PW']   != $AUTH_PASS
-          );
-          if ($is_not_authenticated) {
-              $data = json_decode(file_get_contents('php://input'), true);
-              $this->add_debug_log("ipn_response_invalid_auth " . print_r($data, true));
-              ///return false;
-
-          }
-          return true;
-   
-        }
-
-        function ipn_response()
-        {
-            global $woocommerce;
-            //echo "callback here";
-
-            
-
-            $action = $_GET['action'];
-            //https://om4g.us/wp/wc-api/netzmeqr_gateway/?action=checkstatus
-            if($action=="checkstatus"){
-                $this->checkstatus();
-                die();
-            }
-
-            if ($this->checkAuth() === false) {
-                //header('HTTP/1.1 401 Authorization Required');
-                //header('WWW-Authenticate: Basic realm="Access denied"');
-                //exit;
-            }
-
-            $data = json_decode(file_get_contents('php://input'), true);
-         
-            $this->add_debug_log("ipn_response " . print_r($data, true));
-            $partner_transaction_id = $data['originalPartnerReferenceNo'];
-            $nzid = $data['id'];
-            $nzmerchant = $data['merchant'];
-            $nzpayment_time = $data['additionalInfo']['paymentTime'];
-            $nzstatus = $data['latestTransactionStatus'];
-            $nzamount = $data['netAmount']['value'];
-            
-            $splitReffNo = explode("-", $partner_transaction_id);
-
-            $ReffNo_Date    = $splitReffNo[0];
-            $ReffNo_Number  = $splitReffNo[1];
-            
-            $order = wc_get_order($ReffNo_Number);
-         
-            if($ReffNo_Number == ""){
-                echo "Transaction not found";
-                die();
-            }
-            if($nzstatus != "00"){
-                echo "Transaction already paid";
-                die();
-            }
-            if(floatval($nzamount)!=$order->get_total()){
-                //echo "Transaction amount not match";
-                //die();
-            }
-
-
-            
-            if($order->get_status() == 'pending' || $order->get_status() == 'on-hold')
-            {
-
-            }
-            $order->add_order_note('The Order has been Paid by netzme Payment Gateway with QR.');
-            $order->payment_complete();
-            $order->update_status('processing');
-            $order->save();
-
-			//WC()->mailer()->customer_invoice($order);
-            
-            WC()->mailer()->get_emails()['WC_Email_Customer_Processing_Order']->trigger( $order->id );
-
-            WC()->mailer()->get_emails()['WC_Email_New_Order']->re_trigger( $order->id );
-
-
-            $named_array = array(
-                    "id" => "$order->id",
-                    "transaction_id" => "$partner_transaction_id",
-                    "status" => "$nzstatus",
-                    "merchant" => "$nzmerchant",
-                    "payment_time" => "$nzpayment_time"
-            );
-            echo json_encode($named_array);
-
-            die();
-        }
-
-        function getToken(){
-            $api_url = 'https://tokoapi-stg.netzme.com/oauth/merchant/accesstoken';
-            $body = json_encode($named_array);
-            $headers = array('Authorization' => 'Bearer b5e390df-7df0-4d3a-bdc9-afbe92aeebb3', 'Request-Time' => 'application/json');
-            $request = new WP_Http;
-            $result = $request->request( $api_url , array( 'method' => 'POST', 'body' => $body, 'headers' => $headers ) );
-        }
-
-        function add_debug_log( $message ) {
-            /*
-            if ( self::is_wc_2_1() ) {
-                return new WC_Logger();
-            } else {
-                    global $woocommerce;
-                    return $woocommerce->logger();
-            }
-            if ( ! is_object( self::$log ) ) {
-                self::$log = WC_Compat_iPay88_ATMTransfer::get_wc_logger();
-            }
-            */
-            $log = new WC_Logger();
-            $log->add( 'netzme', $message );
-        }
-        function encrypt($data) {
-            $key = "om4gus";
-            $plaintext = $data;
-            $ivlen = openssl_cipher_iv_length($cipher = "AES-128-CBC");
-            $iv = openssl_random_pseudo_bytes($ivlen);
-            $ciphertext_raw = openssl_encrypt($plaintext, $cipher, $key, $options = OPENSSL_RAW_DATA, $iv);
-            $hmac = hash_hmac('sha256', $ciphertext_raw, $key, $as_binary = true);
-            $ciphertext = base64_encode($iv . $hmac . $ciphertext_raw);
-            return $ciphertext;
-        }
-        function decrypt($data) {
-            $key = "om4gus";
-            $c = base64_decode($data);
-            $ivlen = openssl_cipher_iv_length($cipher = "AES-128-CBC");
-            $iv = substr($c, 0, $ivlen);
-            $hmac = substr($c, $ivlen, $sha2len = 32);
-            $ciphertext_raw = substr($c, $ivlen + $sha2len);
-            $original_plaintext = openssl_decrypt($ciphertext_raw, $cipher, $key, $options = OPENSSL_RAW_DATA, $iv);
-            $calcmac = hash_hmac('sha256', $ciphertext_raw, $key, $as_binary = true);
-            if (hash_equals($hmac, $calcmac))
-            {
-                return $original_plaintext;
-            }
-        }
-
-  } // end \WC_Gateway_netzmeqr class
+if (!class_exists('WC_Gateway_netzmeqr')) {
+	class WC_Gateway_netzmeqr extends WC_Payment_Gateway 
+	{
+		protected $baseUrl;
+		protected $payBaseUrl;
+		protected $clientId;
+		protected $clientSecret;
+		protected $merchantId;
+		protected $payClientId;
+		protected $feeType;
+		protected $commissionPercentage;
+		protected $privateKey;
+		protected $channelID;
+		protected $expiredTime;
+		protected $terminalId;
+
+		/**
+		 * Constructor for the gateway.
+		 */
+		public function __construct() 
+		{
+			$this->id = 'netzmeqr_gateway';
+			$this->icon = apply_filters('woocommerce_netzmeqr_icon', '');
+			$this->has_fields = false;
+			$this->method_title = __( 'netzmeqr', 'wp-invoice-toko-netzme' );
+			$this->method_description = __( 'Allows Netzme QRIS Payment', 'wp-invoice-toko-netzme' );
+
+			// Load the settings.
+			$this->init_form_fields();
+			$this->init_settings();
+
+			// Define user set variables
+			$this->title = $this->get_option( 'title' );
+			$this->description = $this->get_option( 'description' );
+			$this->baseUrl = $this->get_option( 'baseUrl' );
+			$this->clientId = $this->get_option( 'clientId' );
+			$this->clientSecret = $this->get_option( 'clientSecret' );
+			$this->merchantId = $this->get_option( 'merchantId' );
+			$this->feeType = $this->get_option( 'feeType' );
+			$this->commissionPercentage = $this->get_option( 'commissionPercentage' );
+			$this->privateKey = $this->get_option('privateKey');
+			$this->channelID = $this->get_option('channelID');
+			$this->expiredTime = $this->get_option( 'expiredTime' );
+			$this->terminalId = $this->get_option( 'terminalId' );
+		
+			// Actions
+			add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
+			add_action('woocommerce_receipt_' . $this->id, array($this, 'receipt_page'));
+			add_action( 'woocommerce_thankyou_' . $this->id, array( $this, 'thankyou_page' ) );
+			add_action( 'woocommerce_api_netzmeqr_gateway', array( $this, 'ipn_response'));
+		}
+
+		/**
+		 * get Token
+		 */
+		public function getSnapToken() 
+		{
+			$api_url = $this->baseUrl . '/api/v1/access-token/b2b';
+			$rawBody = [
+				'grantType' => 'client_credentials',
+				'additionalInfo' => []
+			];
+			$body = wp_json_encode($rawBody);
+
+			$clientId = $this->clientId;
+			$clientSecret = $this->clientSecret;
+			$privateKey = $this->privateKey;
+
+			$now = gmdate(DATE_ATOM);
+			$sign = $this->generateAuthSig($clientId, $clientSecret, $privateKey, $now);
+
+			$headers = array(
+				'Content-Type' => 'application/json', 
+				'X-TIMESTAMP' => $now, 
+				'X-CLIENT-KEY' => $clientId, 
+				'X-SIGNATURE' => $sign
+			);
+
+			$request = new WP_Http;
+			$result = $request->request( $api_url , array( 'method' => 'POST', 'body' => $body, 'headers' => $headers ) );
+
+			$resp = json_decode($result['body']);
+			return $resp;
+		}
+
+		private function generateAuthSig($clientId, $clientSecret, $privateKey, $now) 
+		{
+			$privateKey = "-----BEGIN RSA PRIVATE KEY-----".PHP_EOL.$privateKey.PHP_EOL."-----END RSA PRIVATE KEY-----";
+			$hash = $clientId . '|' . $now;
+			$signature = '';
+
+			if (openssl_sign($hash, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
+				return base64_encode($signature);
+			} else {
+				throw new Exception('Unable to sign data.');
+			}
+		}
+
+		/**
+		 * Initialize Gateway Settings Form Fields
+		 */
+		public function init_form_fields() 
+		{
+
+			$this->form_fields = apply_filters( 'wc_netzmeqr_form_fields', array(
+
+				'enabled' => array(
+					'title'   => esc_html(__( 'Enable/Disable', 'wp-invoice-toko-netzme' )),
+					'type'    => 'checkbox',
+					'label'   => esc_html(__( 'Enable Netzme QRIS Payment', 'wp-invoice-toko-netzme' )),
+					'default' => 'yes'
+				),
+				'title' => array(
+					'title'       => esc_html(__( 'Title', 'wp-invoice-toko-netzme' )),
+					'type'        => 'text',
+					'description' => esc_html(__( 'This controls the title for the payment method the customer sees during checkout.', 'wp-invoice-toko-netzme' )),
+					'default'     => esc_html(__( 'QRIS Netzme Payment', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+				),
+				'baseUrl' => array(
+					'title'       => esc_html(__( 'Base Url', 'wp-invoice-toko-netzme' )),
+					'type'        => 'text',
+					'description' => esc_html(__( 'Base Url', 'wp-invoice-toko-netzme' )),
+					'default'     => esc_html(__( 'https://tokoapi-stg.netzme.com', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+				),
+				'payBaseUrl' => array(
+					'title'       => esc_html(__( 'Pay Base Url', 'wp-invoice-toko-netzme' )),
+					'type'        => 'text',
+					'description' => esc_html(__( 'Pay BaseUrl.', 'wp-invoice-toko-netzme' )),
+					'default'     => esc_html(__( 'https://pay-stg.netzme.com', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+				),
+				'clientId' => array(
+					'title'       => esc_html(__( 'Client Id', 'wp-invoice-toko-netzme' )),
+					'type'        => 'text',
+					'description' => esc_html(__( 'clientId.', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+				),
+				'clientSecret' => array(
+					'title'       => esc_html(__( 'Client Secret', 'wp-invoice-toko-netzme' )),
+					'type'        => 'text',
+					'description' => esc_html(__( 'clientSecret.', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+				),
+				'privateKey' => array(
+					'title'       => esc_html(__( 'Private Key', 'wp-invoice-toko-netzme' )),
+					'type'        => 'textarea',
+					'description' => esc_html(__( 'privateKey.', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+				),
+				'channelID' => array(
+					'title'       => esc_html(__( 'Channel ID', 'wp-invoice-toko-netzme' )),
+					'type'        => 'text',
+					'description' => esc_html(__( 'channelID.', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+				),
+				'merchantId' => array(
+					'title'       => esc_html(__( 'Merchant Id', 'wp-invoice-toko-netzme' )),
+					'type'        => 'text',
+					'description' => esc_html(__( 'merchantId.', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+				),
+				'terminalId' => array(
+					'title'       => esc_html(__( 'Terminal Id', 'wp-invoice-toko-netzme' )),
+					'type'        => 'text',
+					'description' => esc_html(__( 'terminalId.', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+				),
+				'expiredTime' => array(
+	                'title'       => esc_html(__( 'QR Expired Time (Minutes)', 'wp-invoice-toko-netzme' )),
+	                'type'        => 'text',
+	                'description' => esc_html(__( 'QR Expired Time (Minutes).', 'wp-invoice-toko-netzme' )),
+	                'default'     => esc_html(__( '1440', 'wp-invoice-toko-netzme' )),
+	                'desc_tip'    => true,
+	            ),
+				'feeType' => array(
+					'title'       => esc_html(__( 'Fee Type', 'wp-invoice-toko-netzme' )),
+					'type'        => 'select',
+					'description' => esc_html(__( 'Fee Type.', 'wp-invoice-toko-netzme' )),
+					'default'     => esc_html(__( 'on_buyer', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+					'options' => array(
+						'on_buyer' => 'on_buyer',
+						'on_seller' => 'on_seller'
+				   )
+				),              
+				'commissionPercentage' => array(
+					'title'       => esc_html(__( 'Commission Percentage', 'wp-invoice-toko-netzme' )),
+					'type'        => 'text',
+					'description' => esc_html(__( 'Commission Percentage. Example: 0.7', 'wp-invoice-toko-netzme' )),
+					'default'     => esc_html(__( '0.0', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+				),
+
+				'PaymentMethode' => array(
+					'title'       => esc_html(__( 'Payment Methode', 'wp-invoice-toko-netzme' )),
+					'type'        => 'multiselect',
+					'description' => esc_html(__( 'Payment Methode', 'wp-invoice-toko-netzme' )),
+					'default'     => esc_html(__( 'qris', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+					'options' => array(
+						'QRIS' => 'QRIS'
+				   )
+				)
+			) );
+		}
+
+		/**
+		 * Output for the order received page.
+		 */
+		public function thankyou_page() 
+		{
+		
+		}
+
+		/**
+		 * generate random string
+		 */
+		function generate_ref_string($length = 10) {
+		    $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+		    $charactersLength = strlen($characters);
+		    $randomString = '';
+
+		    for ($i = 0; $i < $length; $i++) {
+		        $randomString .= $characters[random_int(0, $charactersLength - 1)];
+		    }
+
+		    return $randomString;
+		}
+
+		/**
+		 * generate random integer
+		 */
+		function generate_rand_order()
+		{
+			$int = wp_rand(10,10000);
+			return $int;
+		}
+
+
+		/**
+		 * Output for the order received page.
+		 * @param int $order_id
+		 */
+		function receipt_page($order_id)
+		{
+			global $woocommerce;
+			$order = new WC_Order( $order_id );
+			if ( $order->get_status() == 'processing' || $order->get_status() == 'completed') {
+				wp_redirect( $order->get_checkout_order_received_url() );
+				exit();
+			}
+		   //check if order alrea
+			if ($order->get_transaction_id()) {
+				$qrImage = $order->get_meta('qr_image');
+				$nzterminalId = $order->get_meta('terminal_id');
+				$datenzexpiredTs = date_parse($order->get_meta('expired_ts'));
+				include_once("qrpage.php");
+				return;
+			}
+
+			$desc = '';
+			if ( 0 < sizeof( $order->get_items() ) ) {
+				foreach ( $order->get_items() as $item ) {
+					if ( $item['qty'] ) {
+						$item_name = htmlspecialchars($item['name']);
+						$desc .= $item['qty'] .' x '. $item_name . ', ';
+					}
+				}
+				$desc = substr($desc, 0, -2 );
+			}
+			$generate_ref_string = $this->generate_ref_string();
+			$refNo  = date_format($order->get_date_created(), "Ymd") .$generate_ref_string. "-" . $order_id;
+			$expiredTime = intval($this->expiredTime)*60;
+			$invoice_array = [
+				"custIdMerchant" => $this->merchantId,
+				"partnerReferenceNo" => $refNo,
+				"amount" => [
+					"value" => $order->get_total(),
+					"currency" => "IDR"
+				],
+				"amountDetail" => [
+					"basicAmount" => [
+						"value" => $order->get_total(),
+						"currency" => "IDR"
+					],
+					"shippingAmount" => [
+						"value" => "0",
+						"currency" => "IDR"
+					]
+				],
+				"payMethod" => "QRIS",
+				"terminalId" => $this->terminalId,
+				"commissionPercentage" => $this->commissionPercentage,
+				"expireInSecond" => "$expiredTime", 
+				"feeType" => $this->feeType,
+				"additionalInfo" => [
+					"email" => $order->get_billing_email(),
+					"notes" => $desc,
+					"description" => $desc,
+					"PhoneNumber" => $this->normalizePhoneNumber($order->get_billing_phone()),
+					"imageUrl" => "",
+					"fullname" => $order->get_billing_first_name().' '.$order->get_billing_last_name()
+				]
+			];
+
+			$uri = '/api/v1.0/invoice/create-transaction';
+			$api_url = $this->baseUrl . $uri;
+			$body = wp_json_encode($invoice_array);
+			$now = gmdate(DATE_ATOM);
+
+			$ts = $this->getSnapToken();
+
+			if (is_wp_error($ts)) {
+			 	$cart_page_url = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : $woocommerce->cart->get_cart_url();
+				include_once("error.php");
+				return;
+			}
+
+			$clientId = $this->clientId;
+			$clientSecret = $this->clientSecret;
+			$privateKey = $this->privateKey;
+
+			$sign = $this->generateServiceSignature($clientSecret, 'POST', $uri, $ts->accessToken, $invoice_array, $now);
+			$randNumber = $this->generate_rand_order();
+			$headers = [
+				'Content-Type' => 'application/json',
+				'CHANNEL-ID' => $this->channelID,
+				'X-EXTERNAL-ID' => $order_id.$randNumber,
+				'X-PARTNER-ID' => $this->clientId,
+				'X-TIMESTAMP' => $now, 
+				'Authorization' => $ts->tokenType .' ' . $ts->accessToken,
+				'X-SIGNATURE' => $sign
+			];
+
+			$request = new WP_Http;
+			$result = $request->request( $api_url , array( 'method' => 'POST', 'body' => $body, 'headers' => $headers ) );
+			
+			if (is_wp_error($result)) {
+				$cart_page_url = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : $woocommerce->cart->get_cart_url();
+				include_once("error.php");
+				return;
+			}
+
+			$resp = json_decode($result['body']);
+
+			if (is_wp_error($resp)) {
+				$cart_page_url = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : $woocommerce->cart->get_cart_url();
+				include_once("error.php");
+				return;
+
+			}
+
+			$nzstatus = (isset($resp->additionalInfo->status)) ? $resp->additionalInfo->status : null;
+			
+			if (!$nzstatus) {
+				$cart_page_url = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : $woocommerce->cart->get_cart_url();
+				include_once("error.php");
+				return;
+				
+			} else {
+				$nzmessage      = $resp->responseMessage;
+				$nzexpiredTs    = $resp->additionalInfo->expiredTs;
+				$datenzexpiredTs = date_parse($nzexpiredTs);
+				$nzterminalId   = $resp->additionalInfo->terminalId;
+				$qrImage        = $resp->additionalInfo->qrImage;
+
+				$order->set_transaction_id($resp->partnerReferenceNo);
+				$order->update_meta_data('qr_image', $qrImage);
+				$order->update_meta_data('terminal_id', $nzterminalId);
+				$order->update_meta_data('expired_ts', $resp->additionalInfo->expiredTs);
+
+				$order->save();
+
+				WC()->mailer()->customer_invoice($order);
+				WC()->cart->empty_cart();
+				wc_reduce_stock_levels($order_id);
+				include_once("qrpage.php");
+			}
+		}
+
+		/**
+		 * generate signature
+		 * @param string $clientSecret
+		 * @param string $method
+		 * @param string $uri
+		 * @param string $token
+		 * @param string $body
+		 * @param int $now
+		 */
+
+		function generateServiceSignature($clientSecret, $method, $uri, $token, $body, $now) 
+		{
+			$data = wp_json_encode($body);
+			$signature = '';
+			$data = "{$method}:{$uri}:{$token}:". hash('sha256', $data) .":{$now}";
+
+			$signature = hash_hmac('sha512', $data, $clientSecret);
+
+			return $signature;
+		}
+
+		/**
+		 * normalize phone number
+		 *
+		 * @access private
+		 * @param string $phoneNumber
+		 */
+		private function normalizePhoneNumber($phoneNumber) 
+		{
+			if (isset($phoneNumber) && is_string($phoneNumber)) {
+				return preg_replace(['/\s|-|\.|_|=|[aA-zZ]/', '/^0/', '/^[1-9]/'], ['', '+62', '+$0'], $phoneNumber);
+			}
+			return $phoneNumber;
+		}
+
+
+		/**
+		 * Add content to the WC emails.
+		 *
+		 * @access public
+		 * @param WC_Order $order
+		 * @param bool $sent_to_admin
+		 * @param bool $plain_text
+		 */
+		public function email_instructions( $order, $sent_to_admin, $plain_text = false ) 
+		{
+
+			if ( $this->instructions && ! $sent_to_admin && $this->id === $order->payment_method && $order->has_status( 'on-hold' ) ) {
+				echo esc_html(wpautop( wptexturize( esc_html($this->instructions )) )) . PHP_EOL;
+			}
+		}
+
+		/**
+		 * Process the payment and return the result
+		 *
+		 * @param int $order_id
+		 * @return array
+		 */
+		public function process_payment( $order_id ) 
+		{
+
+			$order = wc_get_order( $order_id );
+			$orderkey = !method_exists($order, 'get_order_key') ? $order->order_key : $order->get_order_key();
+			$orderid = !method_exists($order, 'get_id') ? $order->id : $order->get_id();
+
+			return array(   'result'    => 'success',
+			'redirect'  => add_query_arg('key', $orderkey, add_query_arg(array(
+			'order-pay' => $orderid),
+			$order->get_checkout_payment_url(true))));
+		}
+
+		/**
+		 * check status
+		 *
+		 */
+		public function checkstatus() 
+		{
+			$key = filter_input( INPUT_GET, 'key' );
+			$order_id = $this->decrypt($key);
+			$order = new WC_Order( $order_id );
+			if ( $order->get_status() == 'processing' || $order->get_status() == 'completed' ) {
+				echo esc_html("1");
+				die();
+			}
+			echo esc_html("0");
+		}
+
+		/**
+		 * handle callbacack
+		 *
+		 */
+		function ipn_response()
+		{
+			global $woocommerce;
+
+			$action = filter_input( INPUT_GET, 'action' );
+			if ($action == "checkstatus") {
+				$this->checkstatus();
+				die();
+			}
+
+			$data = json_decode(file_get_contents('php://input'), true);
+			$partner_transaction_id = sanitize_text_field($data['originalPartnerReferenceNo']);
+			$nzid = sanitize_text_field($data['id']);
+			$nzmerchant = sanitize_text_field($data['merchant']);
+			$nzpayment_time = sanitize_text_field($data['additionalInfo']['paymentTime']);
+			$nzstatus = sanitize_text_field($data['latestTransactionStatus']);
+			$nzamount = sanitize_text_field($data['netAmount']['value']);
+			
+			$splitReffNo = explode("-", $partner_transaction_id);
+
+			$ReffNo_Date    = $splitReffNo[0];
+			$ReffNo_Number  = $splitReffNo[1];
+			
+			$order = wc_get_order($ReffNo_Number);
+		 
+			if ($ReffNo_Number == "") {
+				echo esc_html("Transaction not found");
+				die();
+			}
+			
+			if ($nzstatus != "00") {
+				echo esc_html("Transaction already paid");
+				die();
+			}
+			
+			$order->add_order_note('The Order has been Paid by QRIS Netzme Payment.');
+			$order->payment_complete();
+			$order->update_status('processing');
+			$order->save();
+
+			WC()->mailer()->customer_invoice($order);
+			
+			$resp_array = array(
+					"id" => "$order->id",
+					"transaction_id" => "$partner_transaction_id",
+					"status" => "$nzstatus",
+					"merchant" => "$nzmerchant",
+					"payment_time" => "$nzpayment_time"
+			);
+			echo wp_json_encode($resp_array);
+			die();
+		}
+		
+		/**
+		 * encrypt
+		 *
+		 * @param string $data
+		 */
+		public function encrypt($data) 
+		{
+			$key = NETZME_APP_KEY;
+			$plaintext = $data;
+			$ivlen = openssl_cipher_iv_length($cipher = "AES-128-CBC");
+			$iv = openssl_random_pseudo_bytes($ivlen);
+			$ciphertext_raw = openssl_encrypt($plaintext, $cipher, $key, $options = OPENSSL_RAW_DATA, $iv);
+			$hmac = hash_hmac('sha256', $ciphertext_raw, $key, $as_binary = true);
+			$ciphertext = base64_encode($iv . $hmac . $ciphertext_raw);
+			return $ciphertext;
+		}
+
+		/**
+		 * decrypt
+		 *
+		 * @param string $data
+		 */
+		public function decrypt($data) 
+		{
+			$key = NETZME_APP_KEY;
+			$c = base64_decode($data);
+			$ivlen = openssl_cipher_iv_length($cipher = "AES-128-CBC");
+			$iv = substr($c, 0, $ivlen);
+			$hmac = substr($c, $ivlen, $sha2len = 32);
+			$ciphertext_raw = substr($c, $ivlen + $sha2len);
+			$original_plaintext = openssl_decrypt($ciphertext_raw, $cipher, $key, $options = OPENSSL_RAW_DATA, $iv);
+			$calcmac = hash_hmac('sha256', $ciphertext_raw, $key, $as_binary = true);
+			if (hash_equals($hmac, $calcmac))
+			{
+				return $original_plaintext;
+			}
+		}
+
+	} // end \WC_Gateway_netzmeqr class
 }
