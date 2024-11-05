@@ -131,6 +131,7 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 		protected $privateKey;
 		protected $channelID;
 		protected $expiredTime;
+		protected $terminalId;
 
 		/**
 		 * Constructor for the gateway.
@@ -159,6 +160,7 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 			$this->privateKey = $this->get_option('privateKey');
 			$this->channelID = $this->get_option('channelID');
 			$this->expiredTime = $this->get_option( 'expiredTime' );
+			$this->terminalId = $this->get_option( 'terminalId' );
 		
 			// Actions
 			add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
@@ -278,6 +280,12 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 					'description' => esc_html(__( 'merchantId.', 'wp-invoice-toko-netzme' )),
 					'desc_tip'    => true,
 				),
+				'terminalId' => array(
+					'title'       => esc_html(__( 'Terminal Id', 'wp-invoice-toko-netzme' )),
+					'type'        => 'text',
+					'description' => esc_html(__( 'terminalId.', 'wp-invoice-toko-netzme' )),
+					'desc_tip'    => true,
+				),
 				'expiredTime' => array(
 	                'title'       => esc_html(__( 'QR Expired Time (Minutes)', 'wp-invoice-toko-netzme' )),
 	                'type'        => 'text',
@@ -322,7 +330,7 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 		 */
 		public function thankyou_page() 
 		{
-			echo "Thank you";
+		
 		}
 
 		/**
@@ -402,6 +410,7 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 					]
 				],
 				"payMethod" => "QRIS",
+				"terminalId" => $this->terminalId,
 				"commissionPercentage" => $this->commissionPercentage,
 				"expireInSecond" => "$expiredTime", 
 				"feeType" => $this->feeType,
