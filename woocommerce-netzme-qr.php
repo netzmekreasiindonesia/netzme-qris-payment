@@ -64,7 +64,6 @@ function netzme_qr_add_payment_method_type() {
     );
 }
 
-
 /**
  * function to load a styles css
  */
@@ -79,7 +78,6 @@ function load_styles_srcrips() {
 	wp_register_script( 'qris-js', plugin_dir_url( __FILE__ ).'assets/js/invoice-qris.js', [], NETZME_APP_VERSION, true );
 	wp_enqueue_script( 'qris-js' );
 }
-
 
 function load_check_status_script() {
 	$order_id = filter_input( INPUT_GET, 'order-pay', FILTER_SANITIZE_NUMBER_INT);
@@ -131,7 +129,6 @@ function load_check_status_script() {
 	}
 }
 add_action( 'wp_enqueue_scripts', 'load_check_status_script');
-
 
 /**
  * Adds plugin page links
@@ -402,7 +399,6 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 			return $int;
 		}
 
-
 		/**
 		 * Output for the order received page.
 		 * @param int $order_id
@@ -578,7 +574,6 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 			}
 			return $phoneNumber;
 		}
-
 
 		/**
 		 * Add content to the WC emails.
