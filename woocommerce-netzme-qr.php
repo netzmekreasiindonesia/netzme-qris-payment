@@ -43,12 +43,12 @@ function check_cart_checkout_blocks_compatibility() {
 }
 add_action('before_woocommerce_init', 'check_cart_checkout_blocks_compatibility');
 
-add_action( 'woocommerce_blocks_loaded', 'netzme_qr_add_payment_method_type' );
+add_action( 'woocommerce_blocks_loaded', 'add_payment_method_type' );
 
 /**
  * function to register a payment method type
  */
-function netzme_qr_add_payment_method_type() {
+function add_payment_method_type() {
     // Check if the required class exists
     if ( ! class_exists( 'Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
         return;
@@ -137,7 +137,7 @@ add_action( 'wp_enqueue_scripts', 'load_check_status_script');
  * @param array $links all plugin links
  * @return array $links all plugin links + our custom links (i.e., "Settings")
  */
-function netzmeqr_gateway_plugin_links( $links ) {
+function add_gateway_plugin_links( $links ) {
 
 	$plugin_links = array(
 		'<a href="' . admin_url( 'admin.php?page=wc-settings&tab=checkout&section=netzmeqr_gateway' ) . '">' . __( 'Configure', 'wp-invoice-toko-netzme' ) . '</a>'
@@ -145,7 +145,7 @@ function netzmeqr_gateway_plugin_links( $links ) {
 
 	return array_merge( $plugin_links, $links );
 }
-add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'netzmeqr_gateway_plugin_links' );
+add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'add_gateway_plugin_links' );
 
 /**
  * netzmeqr Payment Gateway
