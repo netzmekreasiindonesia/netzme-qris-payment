@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: QRIS Invoice Netzme
- * Plugin URI: https://www.netzme.id
+ * Plugin URI: https://github.com/netzmekreasiindonesia/wp-invoice-toko-netzme
  * Description: Accept QRIS payments in Indonesia with Netzme. Seamlessly integrated into WooCommerce.
  * Author: Netzme
  * Author URI: https://www.netzme.id
@@ -34,21 +34,21 @@ function netzmeqr_add_to_gateways( $gateways ) {
 add_filter( 'woocommerce_payment_gateways', 'netzmeqr_add_to_gateways' );
 
 /**
- * function to declare compatibility with cart_checkout_blocks feature 
+ * function to check compatibility with cart_checkout_blocks feature 
 */
-function declare_cart_checkout_blocks_compatibility() {
+function check_cart_checkout_blocks_compatibility() {
     if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
         \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('cart_checkout_blocks', __FILE__, true);
     }
 }
-add_action('before_woocommerce_init', 'declare_cart_checkout_blocks_compatibility');
+add_action('before_woocommerce_init', 'check_cart_checkout_blocks_compatibility');
 
-add_action( 'woocommerce_blocks_loaded', 'netzme_qr_register_payment_method_type' );
+add_action( 'woocommerce_blocks_loaded', 'netzme_qr_add_payment_method_type' );
 
 /**
  * function to register a payment method type
  */
-function netzme_qr_register_payment_method_type() {
+function netzme_qr_add_payment_method_type() {
     // Check if the required class exists
     if ( ! class_exists( 'Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
         return;
@@ -64,28 +64,73 @@ function netzme_qr_register_payment_method_type() {
     );
 }
 
+
 /**
- * function to register a styles css
+ * function to load a styles css
  */
-add_action('init', 'register_netzme_styles');
-function register_netzme_styles() {
+add_action('init', 'load_styles_srcrips');
+function load_styles_srcrips() {
 	wp_register_style( 'qris-css', plugin_dir_url( __FILE__ ).'assets/css/css.css', array(), NETZME_APP_VERSION );
 	wp_enqueue_style( 'qris-css' );
 
 	wp_register_style( 'invoice-qris-css', plugin_dir_url( __FILE__ ).'assets/css/invoice-qris.css', array(), NETZME_APP_VERSION );
 	wp_enqueue_style( 'invoice-qris-css' );
-}
 
-
-/**
- * function to register a scripts
- */
-add_action('init', 'register_netzme_scripts');
-function register_netzme_scripts() {
 	wp_register_script( 'qris-js', plugin_dir_url( __FILE__ ).'assets/js/invoice-qris.js', [], NETZME_APP_VERSION, true );
 	wp_enqueue_script( 'qris-js' );
 }
 
+
+function load_check_status_script() {
+	$order_id = filter_input( INPUT_GET, 'order-pay', FILTER_SANITIZE_NUMBER_INT);
+	if ($order_id && !empty($order_id)) {
+
+		$netzmeQRISPaymentGatewayPlugin = new WC_Gateway_netzmeqr();
+		$order = new WC_Order($order_id);
+		$key = urlencode($netzmeQRISPaymentGatewayPlugin->encrypt($order_id));
+		$base_url = esc_url(get_site_url()).'?wc-api=netzmeqr_gateway&action=checkstatus&key='.$key;
+		$received_url = $order->get_checkout_order_received_url();
+
+		$js_check_status = 'function checkStatus(e) {
+								e.preventDefault();
+								jQuery.ajax({
+								  type:"get",
+								  url:"'.$base_url.'",
+								  success:function(data)
+								  {
+								  	  if (data == 1) {
+										window.location = "'.$received_url.'";
+									  } else {
+									  	window.location.href=window.location.href;
+									  }
+								  }
+								});
+								return false;
+							}';
+
+		wp_register_script( 'wc-check-status-js', null, array(), NETZME_APP_VERSION, true );
+		wp_enqueue_script( 'wc-check-status-js' );
+		wp_add_inline_script( 'wc-check-status-js', $js_check_status );
+
+		$js_auto_check_status = 'setInterval(function() {
+			jQuery.ajax({
+			  type:"get",
+			  url:"'.$base_url.'",
+			  success:function(data)
+			  {
+				  if( data == 1){
+				  	window.location = "'.$received_url.'";
+				  }
+			  }
+			});
+		}, 3000);';
+
+		wp_register_script( 'wc-auto-check-status-js', null, array(), NETZME_APP_VERSION, true );
+		wp_enqueue_script( 'wc-auto-check-status-js' );
+		wp_add_inline_script( 'wc-auto-check-status-js', $js_auto_check_status );
+	}
+}
+add_action( 'wp_enqueue_scripts', 'load_check_status_script');
 
 
 /**
@@ -576,7 +621,7 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 		 */
 		public function checkstatus() 
 		{
-			$key = filter_input( INPUT_GET, 'key' );
+			$key = filter_input( INPUT_GET, 'key', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 			$order_id = $this->decrypt($key);
 			$order = new WC_Order( $order_id );
 			if ( $order->get_status() == 'processing' || $order->get_status() == 'completed' ) {
@@ -594,7 +639,7 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 		{
 			global $woocommerce;
 
-			$action = filter_input( INPUT_GET, 'action' );
+			$action = filter_input( INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
 			if ($action == "checkstatus") {
 				$this->checkstatus();
 				die();
@@ -680,6 +725,5 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 				return $original_plaintext;
 			}
 		}
-
 	} // end \WC_Gateway_netzmeqr class
 }
