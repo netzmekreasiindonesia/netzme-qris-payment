@@ -27,11 +27,11 @@ define('NETZME_APP_VERSION', '1.0.6');
  * @param array $gateways all available WC gateways
  * @return array $gateways all WC gateways
  */
-function netzmeqr_add_to_gateways( $gateways ) {
+function netzmeqr_to_gateways( $gateways ) {
 	$gateways[] = 'WC_Gateway_netzmeqr';
 	return $gateways;
 }
-add_filter( 'woocommerce_payment_gateways', 'netzmeqr_add_to_gateways' );
+add_filter( 'woocommerce_payment_gateways', 'netzmeqr_to_gateways' );
 
 /**
  * function to check compatibility with cart_checkout_blocks feature 
