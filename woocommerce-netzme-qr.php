@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: QRIS Invoice Netzme
- * Plugin URI: https://github.com/netzmekreasiindonesia/wp-invoice-toko-netzme
+ * Plugin URI: https://github.com/netzmekreasiindonesia/netzme-qris-payment
  * Description: Accept QRIS payments in Indonesia with Netzme. Seamlessly integrated into WooCommerce.
  * Author: Netzme
  * Author URI: https://www.netzme.id
@@ -36,19 +36,19 @@ add_filter( 'woocommerce_payment_gateways', 'netzmeqr_add_to_gateways' );
 /**
  * function to check compatibility with cart_checkout_blocks feature 
 */
-function check_cart_checkout_blocks_compatibility() {
+function nqpcart_checkout_blocks_compatibility() {
     if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
         \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('cart_checkout_blocks', __FILE__, true);
     }
 }
-add_action('before_woocommerce_init', 'check_cart_checkout_blocks_compatibility');
+add_action('before_woocommerce_init', 'nqpcart_checkout_blocks_compatibility');
 
-add_action( 'woocommerce_blocks_loaded', 'add_payment_method_type' );
+add_action( 'woocommerce_blocks_loaded', 'letsget_payment_method_type' );
 
 /**
  * function to register a payment method type
  */
-function add_payment_method_type() {
+function letsget_payment_method_type() {
     // Check if the required class exists
     if ( ! class_exists( 'Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
         return;
@@ -65,21 +65,23 @@ function add_payment_method_type() {
 }
 
 /**
- * function to load a styles css
+ * function to load a styles and scripts
  */
-add_action('init', 'load_styles_srcrips');
-function load_styles_srcrips() {
-	wp_register_style( 'qris-css', plugin_dir_url( __FILE__ ).'assets/css/css.css', array(), NETZME_APP_VERSION );
-	wp_enqueue_style( 'qris-css' );
+add_action('init', 'itis_styles_script');
+function itis_styles_script() {
+	if ( !is_admin() ) {
+		wp_register_style( 'qris-css', plugin_dir_url( __FILE__ ).'assets/css/css.css', array(), NETZME_APP_VERSION );
+		wp_enqueue_style( 'qris-css' );
 
-	wp_register_style( 'invoice-qris-css', plugin_dir_url( __FILE__ ).'assets/css/invoice-qris.css', array(), NETZME_APP_VERSION );
-	wp_enqueue_style( 'invoice-qris-css' );
+		wp_register_style( 'invoice-qris-css', plugin_dir_url( __FILE__ ).'assets/css/invoice-qris.css', array(), NETZME_APP_VERSION );
+		wp_enqueue_style( 'invoice-qris-css' );
 
-	wp_register_script( 'qris-js', plugin_dir_url( __FILE__ ).'assets/js/invoice-qris.js', [], NETZME_APP_VERSION, true );
-	wp_enqueue_script( 'qris-js' );
+		wp_register_script( 'qris-js', plugin_dir_url( __FILE__ ).'assets/js/invoice-qris.js', [], NETZME_APP_VERSION, true );
+		wp_enqueue_script( 'qris-js' );
+	}
 }
 
-function load_check_status_script() {
+function must_have_status_script() {
 	$order_id = filter_input( INPUT_GET, 'order-pay', FILTER_SANITIZE_NUMBER_INT);
 	if ($order_id && !empty($order_id)) {
 
@@ -128,7 +130,7 @@ function load_check_status_script() {
 		wp_add_inline_script( 'wc-auto-check-status-js', $js_auto_check_status );
 	}
 }
-add_action( 'wp_enqueue_scripts', 'load_check_status_script');
+add_action( 'wp_enqueue_scripts', 'must_have_status_script');
 
 /**
  * Adds plugin page links
@@ -137,15 +139,15 @@ add_action( 'wp_enqueue_scripts', 'load_check_status_script');
  * @param array $links all plugin links
  * @return array $links all plugin links + our custom links (i.e., "Settings")
  */
-function add_gateway_plugin_links( $links ) {
+function maybe_gateway_plugin_links( $links ) {
 
 	$plugin_links = array(
-		'<a href="' . admin_url( 'admin.php?page=wc-settings&tab=checkout&section=netzmeqr_gateway' ) . '">' . __( 'Configure', 'wp-invoice-toko-netzme' ) . '</a>'
+		'<a href="' . admin_url( 'admin.php?page=wc-settings&tab=checkout&section=netzmeqr_gateway' ) . '">' . __( 'Configure', 'netzme-qris-payment' ) . '</a>'
 	);
 
 	return array_merge( $plugin_links, $links );
 }
-add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'add_gateway_plugin_links' );
+add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'maybe_gateway_plugin_links' );
 
 /**
  * netzmeqr Payment Gateway
@@ -183,8 +185,8 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 			$this->id = 'netzmeqr_gateway';
 			$this->icon = apply_filters('woocommerce_netzmeqr_icon', '');
 			$this->has_fields = false;
-			$this->method_title = __( 'netzmeqr', 'wp-invoice-toko-netzme' );
-			$this->method_description = __( 'Allows Netzme QRIS Payment', 'wp-invoice-toko-netzme' );
+			$this->method_title = __( 'netzmeqr', 'netzme-qris-payment' );
+			$this->method_description = __( 'Allows Netzme QRIS Payment', 'netzme-qris-payment' );
 
 			// Load the settings.
 			$this->init_form_fields();
@@ -266,80 +268,80 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 			$this->form_fields = apply_filters( 'wc_netzmeqr_form_fields', array(
 
 				'enabled' => array(
-					'title'   => esc_html(__( 'Enable/Disable', 'wp-invoice-toko-netzme' )),
+					'title'   => esc_html(__( 'Enable/Disable', 'netzme-qris-payment' )),
 					'type'    => 'checkbox',
-					'label'   => esc_html(__( 'Enable Netzme QRIS Payment', 'wp-invoice-toko-netzme' )),
+					'label'   => esc_html(__( 'Enable Netzme QRIS Payment', 'netzme-qris-payment' )),
 					'default' => 'yes'
 				),
 				'title' => array(
-					'title'       => esc_html(__( 'Title', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Title', 'netzme-qris-payment' )),
 					'type'        => 'text',
-					'description' => esc_html(__( 'This controls the title for the payment method the customer sees during checkout.', 'wp-invoice-toko-netzme' )),
-					'default'     => esc_html(__( 'QRIS Netzme Payment', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'This controls the title for the payment method the customer sees during checkout.', 'netzme-qris-payment' )),
+					'default'     => esc_html(__( 'QRIS Netzme Payment', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 				),
 				'baseUrl' => array(
-					'title'       => esc_html(__( 'Base Url', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Base Url', 'netzme-qris-payment' )),
 					'type'        => 'text',
-					'description' => esc_html(__( 'Base Url', 'wp-invoice-toko-netzme' )),
-					'default'     => esc_html(__( 'https://tokoapi-stg.netzme.com', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'Base Url', 'netzme-qris-payment' )),
+					'default'     => esc_html(__( 'https://tokoapi-stg.netzme.com', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 				),
 				'payBaseUrl' => array(
-					'title'       => esc_html(__( 'Pay Base Url', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Pay Base Url', 'netzme-qris-payment' )),
 					'type'        => 'text',
-					'description' => esc_html(__( 'Pay BaseUrl.', 'wp-invoice-toko-netzme' )),
-					'default'     => esc_html(__( 'https://pay-stg.netzme.com', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'Pay BaseUrl.', 'netzme-qris-payment' )),
+					'default'     => esc_html(__( 'https://pay-stg.netzme.com', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 				),
 				'clientId' => array(
-					'title'       => esc_html(__( 'Client Id', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Client Id', 'netzme-qris-payment' )),
 					'type'        => 'text',
-					'description' => esc_html(__( 'clientId.', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'clientId.', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 				),
 				'clientSecret' => array(
-					'title'       => esc_html(__( 'Client Secret', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Client Secret', 'netzme-qris-payment' )),
 					'type'        => 'text',
-					'description' => esc_html(__( 'clientSecret.', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'clientSecret.', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 				),
 				'privateKey' => array(
-					'title'       => esc_html(__( 'Private Key', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Private Key', 'netzme-qris-payment' )),
 					'type'        => 'textarea',
-					'description' => esc_html(__( 'privateKey.', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'privateKey.', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 				),
 				'channelID' => array(
-					'title'       => esc_html(__( 'Channel ID', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Channel ID', 'netzme-qris-payment' )),
 					'type'        => 'text',
-					'description' => esc_html(__( 'channelID.', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'channelID.', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 				),
 				'merchantId' => array(
-					'title'       => esc_html(__( 'Merchant Id', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Merchant Id', 'netzme-qris-payment' )),
 					'type'        => 'text',
-					'description' => esc_html(__( 'merchantId.', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'merchantId.', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 				),
 				'terminalId' => array(
-					'title'       => esc_html(__( 'Terminal Id', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Terminal Id', 'netzme-qris-payment' )),
 					'type'        => 'text',
-					'description' => esc_html(__( 'terminalId.', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'terminalId.', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 				),
 				'expiredTime' => array(
-	                'title'       => esc_html(__( 'QR Expired Time (Minutes)', 'wp-invoice-toko-netzme' )),
+	                'title'       => esc_html(__( 'QR Expired Time (Minutes)', 'netzme-qris-payment' )),
 	                'type'        => 'text',
-	                'description' => esc_html(__( 'QR Expired Time (Minutes).', 'wp-invoice-toko-netzme' )),
-	                'default'     => esc_html(__( '1440', 'wp-invoice-toko-netzme' )),
+	                'description' => esc_html(__( 'QR Expired Time (Minutes).', 'netzme-qris-payment' )),
+	                'default'     => esc_html(__( '1440', 'netzme-qris-payment' )),
 	                'desc_tip'    => true,
 	            ),
 				'feeType' => array(
-					'title'       => esc_html(__( 'Fee Type', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Fee Type', 'netzme-qris-payment' )),
 					'type'        => 'select',
-					'description' => esc_html(__( 'Fee Type.', 'wp-invoice-toko-netzme' )),
-					'default'     => esc_html(__( 'on_buyer', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'Fee Type.', 'netzme-qris-payment' )),
+					'default'     => esc_html(__( 'on_buyer', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 					'options' => array(
 						'on_buyer' => 'on_buyer',
@@ -347,18 +349,18 @@ if (!class_exists('WC_Gateway_netzmeqr')) {
 				   )
 				),              
 				'commissionPercentage' => array(
-					'title'       => esc_html(__( 'Commission Percentage', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Commission Percentage', 'netzme-qris-payment' )),
 					'type'        => 'text',
-					'description' => esc_html(__( 'Commission Percentage. Example: 0.7', 'wp-invoice-toko-netzme' )),
-					'default'     => esc_html(__( '0.0', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'Commission Percentage. Example: 0.7', 'netzme-qris-payment' )),
+					'default'     => esc_html(__( '0.0', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 				),
 
 				'PaymentMethode' => array(
-					'title'       => esc_html(__( 'Payment Methode', 'wp-invoice-toko-netzme' )),
+					'title'       => esc_html(__( 'Payment Methode', 'netzme-qris-payment' )),
 					'type'        => 'multiselect',
-					'description' => esc_html(__( 'Payment Methode', 'wp-invoice-toko-netzme' )),
-					'default'     => esc_html(__( 'qris', 'wp-invoice-toko-netzme' )),
+					'description' => esc_html(__( 'Payment Methode', 'netzme-qris-payment' )),
+					'default'     => esc_html(__( 'qris', 'netzme-qris-payment' )),
 					'desc_tip'    => true,
 					'options' => array(
 						'QRIS' => 'QRIS'
