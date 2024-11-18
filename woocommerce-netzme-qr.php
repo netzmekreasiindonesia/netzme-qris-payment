@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: QRIS Invoice Netzme
+ * Plugin Name: Netzme QRIS Payment for WooCommerce
  * Plugin URI: https://github.com/netzmekreasiindonesia/netzme-qris-payment
  * Description: Accept QRIS payments in Indonesia with Netzme. Seamlessly integrated into WooCommerce.
  * Author: Netzme
@@ -27,28 +27,28 @@ define('NETZME_APP_VERSION', '1.0.6');
  * @param array $gateways all available WC gateways
  * @return array $gateways all WC gateways
  */
-function netzmeqr_to_gateways( $gateways ) {
+function nqpfwc_add_to_gateways( $gateways ) {
 	$gateways[] = 'WC_Gateway_netzmeqr';
 	return $gateways;
 }
-add_filter( 'woocommerce_payment_gateways', 'netzmeqr_to_gateways' );
+add_filter( 'woocommerce_payment_gateways', 'nqpfwc_add_to_gateways' );
 
 /**
  * function to check compatibility with cart_checkout_blocks feature 
 */
-function nqpcart_checkout_blocks_compatibility() {
+function nqpfwc_check_checkout_blocks_compatibility() {
     if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
         \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('cart_checkout_blocks', __FILE__, true);
     }
 }
-add_action('before_woocommerce_init', 'nqpcart_checkout_blocks_compatibility');
+add_action('before_woocommerce_init', 'nqpfwc_check_checkout_blocks_compatibility');
 
-add_action( 'woocommerce_blocks_loaded', 'letsget_payment_method_type' );
+add_action( 'woocommerce_blocks_loaded', 'nqpfwc_reg_payment_method_type' );
 
 /**
  * function to register a payment method type
  */
-function letsget_payment_method_type() {
+function nqpfwc_reg_payment_method_type() {
     // Check if the required class exists
     if ( ! class_exists( 'Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
         return;
@@ -67,8 +67,8 @@ function letsget_payment_method_type() {
 /**
  * function to load a styles and scripts
  */
-add_action('init', 'itis_styles_script');
-function itis_styles_script() {
+add_action('init', 'nqpfwc_styles_script');
+function nqpfwc_styles_script() {
 	if ( !is_admin() ) {
 		wp_register_style( 'qris-css', plugin_dir_url( __FILE__ ).'assets/css/css.css', array(), NETZME_APP_VERSION );
 		wp_enqueue_style( 'qris-css' );
@@ -81,7 +81,10 @@ function itis_styles_script() {
 	}
 }
 
-function must_have_status_script() {
+/**
+ * register check status scripts
+ */
+function nqpfwc_status_script() {
 	$order_id = filter_input( INPUT_GET, 'order-pay', FILTER_SANITIZE_NUMBER_INT);
 	if ($order_id && !empty($order_id)) {
 
@@ -130,7 +133,7 @@ function must_have_status_script() {
 		wp_add_inline_script( 'wc-auto-check-status-js', $js_auto_check_status );
 	}
 }
-add_action( 'wp_enqueue_scripts', 'must_have_status_script');
+add_action( 'wp_enqueue_scripts', 'nqpfwc_status_script');
 
 /**
  * Adds plugin page links
@@ -139,7 +142,7 @@ add_action( 'wp_enqueue_scripts', 'must_have_status_script');
  * @param array $links all plugin links
  * @return array $links all plugin links + our custom links (i.e., "Settings")
  */
-function maybe_gateway_plugin_links( $links ) {
+function nqpfwc_gateway_plugin_links( $links ) {
 
 	$plugin_links = array(
 		'<a href="' . admin_url( 'admin.php?page=wc-settings&tab=checkout&section=netzmeqr_gateway' ) . '">' . __( 'Configure', 'netzme-qris-payment' ) . '</a>'
@@ -147,11 +150,11 @@ function maybe_gateway_plugin_links( $links ) {
 
 	return array_merge( $plugin_links, $links );
 }
-add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'maybe_gateway_plugin_links' );
+add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'nqpfwc_gateway_plugin_links' );
 
-add_action('plugins_loaded', 'qris_payment_init');
+add_action('plugins_loaded', 'nqpfwc_payment_init');
 
-function qris_payment_init() {
+function nqpfwc_payment_init() {
 
 	/**
 	 * netzmeqr Payment Gateway

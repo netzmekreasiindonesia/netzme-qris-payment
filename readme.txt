@@ -1,4 +1,4 @@
-=== QRIS Invoice Netzme ===
+=== Netzme QRIS Payment for WooCommerce ===
 Tags: QRIS, Payment
 Contributors: netzme
 Requires at least: 4.9.16
