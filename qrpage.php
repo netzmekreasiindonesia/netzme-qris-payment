@@ -1,28 +1,4 @@
-<?php
-defined( 'ABSPATH' ) or exit;
-?>
-<script type="text/javascript">
-function CheckStatus(e)
-{
-	e.preventDefault();
-	jQuery.ajax({
-	  type:"get",
-	  url:"<?php echo esc_url_raw(get_site_url()); ?>?wc-api=netzmeqr_gateway&action=checkstatus&key=<?php echo urlencode($this->encrypt($order_id)); ?>",
-	  success:function(data)
-	  {
-	  		console.log(data);
-		  if (data == '1') {
-			<?php
-			echo "t1 = window.setTimeout(function(){ window.location = '".esc_url_raw($order->get_checkout_order_received_url())."'; },3);";            
-			?>
-		  } else {
-			window.location.href=window.location.href;
-		  }
-	  }
-	});
-	return false;
-}
-</script>
+<?php defined( 'ABSPATH' ) or exit;?>
 <div class="content-qr" style="margin-top:49px;">
 	<div class="time-limit-container" style="margin-left:20px;">
 		<div class="time-limit">Bayar sebelum <?php echo esc_html(gmdate('d/m/Y H:i', mktime($datenzexpiredTs['hour'], esc_html($datenzexpiredTs['minute']), esc_html($datenzexpiredTs['second']), esc_html($datenzexpiredTs['month']), esc_html($datenzexpiredTs['day']), esc_html($datenzexpiredTs['year']))));  ?></div> <!--  Minggu, 19 Juni 2022 - 14:01 WIB ?> -->
@@ -59,7 +35,7 @@ function CheckStatus(e)
 			</ol>
 		</div>
 		<div class="action-container" style="margin-bottom:15px;">
-			<button id="btn-status1" type="button" class="btn primary outline block" onclick="javascript: CheckStatus(event)">CEK STATUS PEMBAYARAN</button>
+			<button id="btn-status1" type="button" class="btn primary outline block" onclick="javascript: checkStatus(event)">CEK STATUS PEMBAYARAN</button>
 		</div>
 	</div>
 	<div class="footer-qr"></div>
@@ -120,20 +96,3 @@ function CheckStatus(e)
 		</div>
 	</div>
 </div>
-<script type="text/javascript">
-setInterval(function()
-{
-	jQuery.ajax({
-	  type:"get",
-	  url:"<?php echo esc_url_raw(get_site_url()); ?>?wc-api=netzmeqr_gateway&action=checkstatus&key=<?php echo urlencode($this->encrypt($order_id)); ?>",
-	  success:function(data)
-	  {
-		  if( data == '1'){
-			<?php
-			echo "t1 = window.setTimeout(function(){ window.location = '".esc_url_raw($order->get_checkout_order_received_url())."'; },3);";
-			?>
-		  }
-	  }
-	});
-}, 3000);
-</script>
