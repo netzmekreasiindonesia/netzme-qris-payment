@@ -1,0 +1,16 @@
+name: Self Hosted Runner
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  test:
+    runs-on: [self-hosted, Linux, X64]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: echo "Runner jalan"
