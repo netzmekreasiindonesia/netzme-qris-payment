@@ -1,0 +1,9 @@
+#!/bin/sh
+echo "Running gitleaks pre-commit scan..."
+gitleaks protect --staged --verbose
+RESULT=$?
+if [ $RESULT -ne 0 ]; then
+  echo "❌ Secret detected! Commit dibatalkan."
+  exit 1
+fi
+exit 0
