@@ -18,7 +18,7 @@ if ( ! in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins',
 }
 
 define('NETZME_APP_KEY', 'netzme_key');
-define('NETZME_APP_VERSION', '1.0.6');
+define('NETZME_APP_VERSION', '1.0.7');
 
 /**
  * Add the gateway to WC Available Gateways
@@ -183,6 +183,7 @@ function nqpfwc_payment_init() {
 			protected $channelID;
 			protected $expiredTime;
 			protected $terminalId;
+			protected $xCallbackToken;
 
 			/**
 			 * Constructor for the gateway.
@@ -212,6 +213,7 @@ function nqpfwc_payment_init() {
 				$this->channelID = $this->get_option('channelID');
 				$this->expiredTime = $this->get_option( 'expiredTime' );
 				$this->terminalId = $this->get_option( 'terminalId' );
+				$this->xCallbackToken = $this->get_option( 'xCallbackToken' );
 			
 				// Actions
 				add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
@@ -225,6 +227,8 @@ function nqpfwc_payment_init() {
 			 */
 			public function getSnapToken() 
 			{
+				$logger = wc_get_logger();
+
 				$api_url = $this->baseUrl . '/api/v1/access-token/b2b';
 				$rawBody = [
 					'grantType' => 'client_credentials',
@@ -249,7 +253,44 @@ function nqpfwc_payment_init() {
 				$request = new WP_Http;
 				$result = $request->request( $api_url , array( 'method' => 'POST', 'body' => $body, 'headers' => $headers ) );
 
+				if (is_wp_error($result)) {
+					$logger->error(
+					    'API Error: ' . $result->get_error_message()
+					);
+				    return $result;
+				}
+
+				if (!isset($result['response']['code']) ||
+				    $result['response']['code'] < 200 ||
+				    $result['response']['code'] >= 300) {
+
+					error_log('HTTP Error: ' . print_r($result, true));
+
+					$logger->error(
+					    'HTTP Error: ' . print_r($result, true)
+					);
+			
+				    return new WP_Error(
+				        'api_error',
+				        'Unable to connect API.'
+				    );
+				}
+
 				$resp = json_decode($result['body']);
+
+				if (json_last_error() !== JSON_ERROR_NONE) {
+				    error_log('JSON Error: ' . json_last_error_msg());
+
+				    $logger->error(
+					    'JSON Error: ' . $result->get_error_message()
+					);
+
+				    return new WP_Error(
+				        'json_error',
+				        'Invalid Response'
+				    );
+				}
+
 				return $resp;
 			}
 
@@ -291,14 +332,14 @@ function nqpfwc_payment_init() {
 						'title'       => esc_html(__( 'Base Url', 'netzme-qris-payment' )),
 						'type'        => 'text',
 						'description' => esc_html(__( 'Base Url', 'netzme-qris-payment' )),
-						'default'     => esc_html(__( 'https://tokoapi-stg.netzme.com', 'netzme-qris-payment' )),
+						'default'     => esc_html(__( '', 'netzme-qris-payment' )),
 						'desc_tip'    => true,
 					),
 					'payBaseUrl' => array(
 						'title'       => esc_html(__( 'Pay Base Url', 'netzme-qris-payment' )),
 						'type'        => 'text',
 						'description' => esc_html(__( 'Pay BaseUrl.', 'netzme-qris-payment' )),
-						'default'     => esc_html(__( 'https://pay-stg.netzme.com', 'netzme-qris-payment' )),
+						'default'     => esc_html(__( '', 'netzme-qris-payment' )),
 						'desc_tip'    => true,
 					),
 					'clientId' => array(
@@ -317,6 +358,12 @@ function nqpfwc_payment_init() {
 						'title'       => esc_html(__( 'Private Key', 'netzme-qris-payment' )),
 						'type'        => 'textarea',
 						'description' => esc_html(__( 'privateKey.', 'netzme-qris-payment' )),
+						'desc_tip'    => true,
+					),
+					'xCallbackToken' => array(
+						'title'       => esc_html(__( 'Callback Token', 'netzme-qris-payment' )),
+						'type'        => 'text',
+						'description' => esc_html(__( 'xCallbackToken.', 'netzme-qris-payment' )),
 						'desc_tip'    => true,
 					),
 					'channelID' => array(
@@ -482,7 +529,7 @@ function nqpfwc_payment_init() {
 				$ts = $this->getSnapToken();
 
 				if (is_wp_error($ts)) {
-				 	$cart_page_url = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : $woocommerce->cart->get_cart_url();
+					$cart_page_url = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : $woocommerce->cart->get_cart_url();
 					include_once("error.php");
 					return;
 				}
@@ -491,7 +538,14 @@ function nqpfwc_payment_init() {
 				$clientSecret = $this->clientSecret;
 				$privateKey = $this->privateKey;
 
-				$sign = $this->generateServiceSignature($clientSecret, 'POST', $uri, $ts->accessToken, $invoice_array, $now);
+				try {
+					$sign = $this->generateServiceSignature($clientSecret, 'POST', $uri, $ts->accessToken, $invoice_array, $now);
+				} catch ( Exception $e ) {
+					$cart_page_url = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : $woocommerce->cart->get_cart_url();
+					include_once("error.php");
+					return;
+				}
+				
 				$randNumber = $this->generate_rand_order();
 				$headers = [
 					'Content-Type' => 'application/json',
@@ -514,11 +568,16 @@ function nqpfwc_payment_init() {
 
 				$resp = json_decode($result['body']);
 
+				if (json_last_error() !== JSON_ERROR_NONE || !is_object($resp)) {
+				    $cart_page_url = wc_get_cart_url();
+				    include_once("error.php");
+				    return;
+				}
+
 				if (is_wp_error($resp)) {
 					$cart_page_url = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : $woocommerce->cart->get_cart_url();
 					include_once("error.php");
 					return;
-
 				}
 
 				$nzstatus = (isset($resp->additionalInfo->status)) ? $resp->additionalInfo->status : null;
@@ -636,6 +695,53 @@ function nqpfwc_payment_init() {
 			}
 
 			/**
+			 * Validates the incoming callback request using the configured callback token.
+			 *
+			 * Retrieves the token from the request header or supported GET parameters,
+			 * then compares it against the expected token using a timing-safe comparison.
+			 *
+			 * @return bool Returns true if authentication is successful, otherwise false.
+			 */
+			private function checkAuth()
+	        {
+	          $expected_token = $this->xCallbackToken;
+
+	          header('Cache-Control: no-cache, must-revalidate, max-age=0');
+
+	          $req_headers = function_exists( 'apache_request_headers' ) ? apache_request_headers() : array();
+	          $get_header  = function( $name ) use ( $req_headers ) {
+	              foreach ( $req_headers as $k => $v ) {
+	                  if ( strcasecmp( $k, $name ) === 0 ) {
+	                      return $v;
+	                  }
+	              }
+	              $server_key = 'HTTP_' . strtoupper( str_replace( '-', '_', $name ) );
+	              return isset( $_SERVER[ $server_key ] ) ? $_SERVER[ $server_key ] : '';
+	          };
+
+	          $callback_token = $get_header( 'x-callback-token' );
+	          if ( $callback_token === '' ) {
+	              foreach ( array( 'x-callback-token', 'x_callback_token', 'callback_token' ) as $param ) {
+	                  if ( isset( $_GET[ $param ] ) && $_GET[ $param ] !== '' ) {
+	                      $callback_token = wp_unslash( $_GET[ $param ] );
+	                      break;
+	                  }
+	              }
+	          }
+	          $callback_token = trim( (string) $callback_token );
+
+	          $is_not_authenticated = (
+	              $callback_token === '' ||
+	              ! hash_equals( (string) $expected_token, $callback_token )
+	          );
+	          if ($is_not_authenticated) {
+	              return false;
+	          }
+	          return true;
+	        }
+
+
+			/**
 			 * handle callbacack
 			 *
 			 */
@@ -649,6 +755,11 @@ function nqpfwc_payment_init() {
 					die();
 				}
 
+				if ($this->checkAuth() === false) {
+	                header('HTTP/1.1 401 Authorization Required');
+	                exit;
+	            }
+
 				$data = json_decode(file_get_contents('php://input'), true);
 				$partner_transaction_id = sanitize_text_field($data['originalPartnerReferenceNo']);
 				$nzid = sanitize_text_field($data['id']);
@@ -657,23 +768,37 @@ function nqpfwc_payment_init() {
 				$nzstatus = sanitize_text_field($data['latestTransactionStatus']);
 				$nzamount = sanitize_text_field($data['netAmount']['value']);
 				
-				$splitReffNo = explode("-", $partner_transaction_id);
+				$split_reff_no = explode("-", $partner_transaction_id);
 
-				$ReffNo_Date    = $splitReffNo[0];
-				$ReffNo_Number  = $splitReffNo[1];
-				
-				$order = wc_get_order($ReffNo_Number);
+				$ref_date    = $split_reff_no[0];
+				$ref_number  = $split_reff_no[1];
 			 
-				if ($ReffNo_Number == "") {
+				if ($ref_number == "") {
+					status_header(400);
 					echo esc_html("Transaction not found");
-					die();
+					exit();
 				}
 				
 				if ($nzstatus != "00") {
-					echo esc_html("Transaction already paid");
-					die();
+					status_header(400);
+					echo esc_html("Payment not successful");
+					exit();
 				}
-				
+
+				$order = wc_get_order($ref_number);
+
+				if ( ! $order instanceof WC_Order ) {
+	                status_header(400);
+					echo esc_html("Transaction not found");
+					exit();
+	            }
+
+	            if (floatval($nzamount) != $order->get_total()) {
+	                status_header(400);
+					echo esc_html("Transaction amount not match");
+					exit();
+	            }
+
 				$order->add_order_note('The Order has been Paid by QRIS Netzme Payment.');
 				$order->payment_complete();
 				$order->update_status('processing');
