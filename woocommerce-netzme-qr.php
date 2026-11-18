@@ -5,7 +5,7 @@
  * Description: Accept QRIS payments in Indonesia with Netzme. Seamlessly integrated into WooCommerce.
  * Author: Netzme
  * Author URI: https://www.netzme.id
- * Version: 1.0.6
+ * Version: 1.0.7
  * License: GPLv2 or later
  * License URI: http://www.gnu.org/licenses/gpl-2.0.html
 */
@@ -279,10 +279,8 @@ function nqpfwc_payment_init() {
 				$resp = json_decode($result['body']);
 
 				if (json_last_error() !== JSON_ERROR_NONE) {
-				    error_log('JSON Error: ' . json_last_error_msg());
-
 				    $logger->error(
-					    'JSON Error: ' . $result->get_error_message()
+					    'JSON Error: ' . json_last_error_msg()
 					);
 
 				    return new WP_Error(
@@ -720,14 +718,6 @@ function nqpfwc_payment_init() {
 	          };
 
 	          $callback_token = $get_header( 'x-callback-token' );
-	          if ( $callback_token === '' ) {
-	              foreach ( array( 'x-callback-token', 'x_callback_token', 'callback_token' ) as $param ) {
-	                  if ( isset( $_GET[ $param ] ) && $_GET[ $param ] !== '' ) {
-	                      $callback_token = wp_unslash( $_GET[ $param ] );
-	                      break;
-	                  }
-	              }
-	          }
 	          $callback_token = trim( (string) $callback_token );
 
 	          $is_not_authenticated = (
@@ -793,7 +783,7 @@ function nqpfwc_payment_init() {
 					exit();
 	            }
 
-	            if (floatval($nzamount) != $order->get_total()) {
+	            if ( ! is_numeric( $nzamount ) || wc_format_decimal( $nzamount, wc_get_price_decimals() ) !== wc_format_decimal( $order->get_total(), wc_get_price_decimals() ) ) {
 	                status_header(400);
 					echo esc_html("Transaction amount not match");
 					exit();
